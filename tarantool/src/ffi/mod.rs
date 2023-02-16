@@ -10,6 +10,8 @@ pub mod sql;
 pub mod tarantool;
 #[doc(hidden)]
 pub mod uuid;
+#[doc(hidden)]
+pub mod datetime;
 
 /// Check whether the current tarantool executable supports decimal api.
 /// If this function returns `false` using any of the functions in

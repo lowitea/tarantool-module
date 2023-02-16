@@ -41,6 +41,7 @@ mod transaction;
 mod tuple;
 mod tuple_picodata;
 mod uuid;
+mod datetime;
 
 macro_rules! tests {
     (@should_panic should_panic) => { Some(ShouldPanic::Yes) };
@@ -562,6 +563,10 @@ fn run_tests(cfg: TestConfig) -> Result<bool, io::Error> {
                 uuid::from_tuple,
                 uuid::to_lua,
                 uuid::from_lua,
+                datetime::to_tuple,
+                // datetime::from_tuple,
+                // datetime::to_lua,
+                // datetime::from_lua,
                 enums::space_engine_type,
                 enums::space_field_type,
                 enums::index_type,

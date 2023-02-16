@@ -3,9 +3,9 @@ use std::os::raw::c_char;
 use std::{convert::TryInto, fmt::Display};
 use time::{Duration, UtcOffset};
 
-type Inner = time::OffsetDateTime;
+use crate::ffi::datetime as ffi;
 
-const MP_DATETIME: std::os::raw::c_char = 4;
+type Inner = time::OffsetDateTime;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Datetime {
@@ -50,6 +50,36 @@ impl Datetime {
             .ok()
             .map(Self::from_bytes)
     }
+
+    // /// Convert the tarantool native (little endian) datetime representation into a
+    // /// `Datetime`.
+    // #[inline(always)]
+    // pub fn from_tt_datetime(mut tt: ffi::datetime) -> Self {
+    //     unsafe {
+    //         dbg!(&tt);
+    //         tt.s = tt.s.swap_bytes();
+    //         tt.n = tt.n.swap_bytes();
+    //         tt.tz = tt.tz.swap_bytes();
+    //         tt.tzi = tt.tzi.swap_bytes();
+    //         dbg!(&tt);
+    //         Self::from_bytes(std::mem::transmute(tt))
+    //     }
+    // }
+
+    // /// Return an array of bytes in tarantool native (little endian) format
+    // #[inline(always)]
+    // pub fn to_tt_datetime(&self) -> ffi::datetime {
+    //     unsafe {
+    //         let mut tt: ffi::datetime = std::mem::transmute(self.as_bytes());
+    //         dbg!(&tt);
+    //         tt.s = tt.s.swap_bytes();
+    //         tt.n = tt.n.swap_bytes();
+    //         tt.tz = tt.tz.swap_bytes();
+    //         tt.tzi = tt.tzi.swap_bytes();
+    //         dbg!(&tt);
+    //         tt
+    //     }
+    // }
 
     /// Return an array of bytes in the little endian order
     #[inline(always)]
@@ -98,7 +128,8 @@ impl serde::Serialize for Datetime {
         struct _ExtStruct((c_char, serde_bytes::ByteBuf));
 
         let data = self.as_bytes();
-        _ExtStruct((MP_DATETIME, serde_bytes::ByteBuf::from(&data as &[_]))).serialize(serializer)
+        _ExtStruct((ffi::MP_DATETIME, serde_bytes::ByteBuf::from(&data as &[_])))
+            .serialize(serializer)
     }
 }
 
@@ -112,7 +143,7 @@ impl<'de> serde::Deserialize<'de> for Datetime {
 
         let _ExtStruct((kind, bytes)) = serde::Deserialize::deserialize(deserializer)?;
 
-        if kind != MP_DATETIME {
+        if kind != ffi::MP_DATETIME {
             return Err(serde::de::Error::custom(format!(
                 "Expected Datetime, found msgpack ext #{}",
                 kind
@@ -128,3 +159,70 @@ impl<'de> serde::Deserialize<'de> for Datetime {
         })
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Lua
+////////////////////////////////////////////////////////////////////////////////
+
+// static mut CTID_DATETIME: Option<u32> = None;
+
+// fn ctid_datetime() -> u32 {
+//     unsafe {
+//         if CTID_DATETIME.is_none() {
+//             let lua = crate::global_lua();
+//             let ctid_datetime = tlua::ffi::luaL_ctypeid(
+//                 tlua::AsLua::as_lua(&lua),
+//                 crate::c_ptr!("struct tt_datetime"),
+//             );
+//             assert!(ctid_datetime != 0);
+//             CTID_DATETIME = Some(ctid_datetime)
+//         }
+//         CTID_DATETIME.unwrap()
+//     }
+// }
+
+// impl<L> tlua::LuaRead<L> for Datetime
+// where
+//     L: tlua::AsLua,
+// {
+//     fn lua_read_at_position(lua: L, index: std::num::NonZeroI32) -> Result<Self, L> {
+//         let raw_lua = lua.as_lua();
+//         let index = index.get();
+//         unsafe {
+//             if tlua::ffi::lua_type(raw_lua, index) != tlua::ffi::LUA_TCDATA {
+//                 return Err(lua);
+//             }
+//             let mut ctypeid = std::mem::MaybeUninit::uninit();
+//             let cdata = tlua::ffi::luaL_checkcdata(raw_lua, index, ctypeid.as_mut_ptr());
+//             if ctypeid.assume_init() != ctid_datetime() {
+//                 return Err(lua);
+//             }
+//             Ok(Self::from_tt_datetime(*cdata.cast()))
+//         }
+//     }
+// }
+
+// impl<L: tlua::AsLua> tlua::Push<L> for Datetime {
+//     type Err = tlua::Void;
+
+//     #[inline(always)]
+//     fn push_to_lua(&self, lua: L) -> Result<tlua::PushGuard<L>, (Self::Err, L)> {
+//         tlua::PushInto::push_into_lua(*self, lua)
+//     }
+// }
+
+// impl<L: tlua::AsLua> tlua::PushOne<L> for Datetime {}
+
+// impl<L: tlua::AsLua> tlua::PushInto<L> for Datetime {
+//     type Err = tlua::Void;
+
+//     fn push_into_lua(self, lua: L) -> Result<tlua::PushGuard<L>, (Self::Err, L)> {
+//         unsafe {
+//             let cdata = tlua::ffi::luaL_pushcdata(lua.as_lua(), ctid_datetime());
+//             std::ptr::write(cdata as _, self.to_tt_datetime());
+//             Ok(tlua::PushGuard::new(lua, 1))
+//         }
+//     }
+// }
+
+// impl<L: tlua::AsLua> tlua::PushOneInto<L> for Datetime {}
